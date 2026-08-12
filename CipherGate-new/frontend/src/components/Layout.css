@@ -1,0 +1,131 @@
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.shell__sidebar {
+  border-right: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 16px;
+}
+
+.shell__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 22px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.shell__brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--accent), #1a7f89);
+  color: #04151a;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shell__brand-name {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+
+.shell__brand-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+.shell__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.shell__nav-item {
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.shell__nav-item:hover {
+  background: var(--panel-alt);
+  color: var(--text);
+}
+
+.shell__nav-item--active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.shell__sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+.shell__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+.shell__main {
+  padding: 32px 40px 60px;
+  max-width: 1180px;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  .shell__sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-direction: row;
+    align-items: center;
+    padding: 12px 16px;
+    overflow-x: auto;
+  }
+  .shell__brand {
+    border-bottom: none;
+    padding: 0 12px 0 0;
+    margin: 0;
+  }
+  .shell__nav {
+    flex-direction: row;
+  }
+  .shell__sidebar-footer {
+    display: none;
+  }
+  .shell__main {
+    padding: 20px 16px 40px;
+  }
+}
