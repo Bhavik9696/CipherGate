@@ -23,14 +23,21 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from database import init_db, get_db, Application, SecurityEvent
+from database import init_db, get_db, Application, SecurityEvent, User
 from auth.credentials import create_application, verify_password, get_application_by_id
+from auth.user_auth import (
+    create_user,
+    verify_password as verify_user_password,
+    get_user_by_email,
+)
 from auth.jwt_utils import create_access_token, verify_access_token, JWTError
 from gateway.decision_engine import evaluate_request, DecisionResult
 from audit.logger import log_event
 from api.demo_backend import process_payment
+from api.razorpay_routes import router as razorpay_router
 
 app = FastAPI(title="CipherGate", version="1.0.0")
+app.include_router(razorpay_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,6 +64,17 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     application_id: str
+    password: str
+
+
+class UserRegisterRequest(BaseModel):
+    email: str
+    password: str
+    full_name: Optional[str] = ""
+
+
+class UserLoginRequest(BaseModel):
+    email: str
     password: str
 
 
@@ -102,6 +120,49 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         })
     token = create_access_token(app_obj.id, app_obj.name)
     return {"success": True, "access_token": token, "token_type": "bearer"}
+
+
+# ---------------------------------------------------------------------------
+# User Auth: email + password registration / login
+# ---------------------------------------------------------------------------
+
+@app.post("/auth/user/register")
+def user_register(payload: UserRegisterRequest, db: Session = Depends(get_db)):
+    if not payload.email or "@" not in payload.email:
+        raise HTTPException(status_code=400, detail={"success": False, "error": "INVALID_EMAIL", "message": "A valid email address is required."})
+    if not payload.password or len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail={"success": False, "error": "WEAK_PASSWORD", "message": "Password must be at least 6 characters."})
+    existing = get_user_by_email(db, payload.email)
+    if existing:
+        raise HTTPException(status_code=409, detail={"success": False, "error": "EMAIL_TAKEN", "message": "An account with this email already exists."})
+    user = create_user(db, email=payload.email, password=payload.password, full_name=payload.full_name or "")
+    token = create_access_token(user.id, user.email)
+    return {
+        "success": True,
+        "user_id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "access_token": token,
+        "token_type": "bearer",
+    }
+
+
+@app.post("/auth/user/login")
+def user_login(payload: UserLoginRequest, db: Session = Depends(get_db)):
+    user = get_user_by_email(db, payload.email)
+    if not user or not verify_user_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail={
+            "success": False, "error": "AUTHENTICATION_FAILED", "message": "Invalid email or password."
+        })
+    token = create_access_token(user.id, user.email)
+    return {
+        "success": True,
+        "user_id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "access_token": token,
+        "token_type": "bearer",
+    }
 
 
 @app.get("/auth/verify")

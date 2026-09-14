@@ -267,3 +267,192 @@ logging, and dashboard stats.
 - Support key rotation and per-application scoped permissions
 - Add a scheduled job to purge expired nonces instead of relying on the
   TTL filter at read time
+
+---
+
+## CipherShop Demo
+
+CipherShop is a controlled sample e-commerce client application that sits in
+front of CipherGate. It demonstrates how a real-world third-party application
+communicates with CipherGate and how CipherGate's security pipeline protects
+every API request.
+
+### Purpose
+
+CipherShop is **not** another security gateway. It is a sample **client
+application** — a small storefront where users can select a product, trigger a
+payment, and watch the entire CipherGate security pipeline execute in real time.
+
+### Updated Architecture
+
+```
+             CIPHERSHOP
+          Sample Client App
+                 |
+                 | HMAC-signed REST request
+                 v
+          ┌──────────────┐
+          │  CIPHERGATE  │
+          │              │
+          │ API Key      │
+          │ HMAC-SHA256  │
+          │ Timestamp    │
+          │ Nonce/Replay │
+          │ Rate Limit   │
+          └──────┬───────┘
+                 |
+            Decision Engine
+             /           \
+          ALLOW          BLOCK
+            |              |
+            v              v
+       Demo Backend     Audit Log
+            |
+            v
+         Response
+```
+
+### How CipherShop Communicates with CipherGate
+
+1. On first load, CipherShop calls `/auth/register` to obtain an API key and
+   HMAC secret for a "CipherShop Demo" application. The secret is stored in
+   `localStorage` (client-side only, consistent with the existing Request
+   Editor workflow).
+2. When the user clicks **PAY NOW**, the frontend:
+   - Generates a timestamp and nonce using `crypto.js` (the shared signing
+     utility).
+   - Computes an HMAC-SHA256 signature over the canonical request using the
+     Web Crypto API.
+   - Posts the signed request directly to `/api/payment` on the CipherGate
+     backend.
+3. CipherGate runs the full 5-stage security pipeline. The response includes a
+   `decision` object with per-check results.
+4. CipherShop displays the result, including a live security pipeline
+   visualization.
+5. Every request is automatically recorded in the `security_events` table and
+   visible in the existing **Dashboard** and **Security Events** pages.
+
+### Running the CipherShop Demo
+
+No extra setup is required. CipherShop is part of the main application.
+
+**Start the backend and frontend as usual:**
+
+```bash
+# Backend (from CipherGate-new/)
+.venv\Scripts\activate       # Windows
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
+# Frontend (from CipherGate-new/frontend/)
+npm run dev
+```
+
+Then navigate to `http://localhost:5173` and click **🛒 CipherShop** in the
+sidebar.
+
+### Five Demo Scenarios
+
+#### DEMO 1 — Normal Payment Flow
+1. Open **CipherShop** from the sidebar.
+2. Select any product (e.g. Wireless Headphones — ₹5,000).
+3. Click **PAY NOW**.
+4. Expected: `HTTP 200` — Payment Successful. All five checks show ✓.
+5. Open **Dashboard** → observe the "Allowed" counter increment.
+
+> *"The request was authenticated, cryptographically verified, checked for
+> freshness and replay, rate-limited, and then forwarded."*
+
+#### DEMO 2 — Request Tampering Attack
+1. Open **⚡ Security Demo** from the sidebar.
+2. Find section **02 — Request Tampering Attack**.
+3. Click **Run Tampering Attack**.
+4. Expected: `HTTP 403 — HMAC_VERIFICATION_FAILED`. The pipeline shows
+   API Key ✓, HMAC ✗, all subsequent checks skipped.
+
+> *"The request was authenticated but its integrity was compromised, so
+> CipherGate blocked it."*
+
+#### DEMO 3 — Replay Attack
+1. In **⚡ Security Demo**, find section **03 — Replay Attack**.
+2. Click **Send Valid Request** (Step 1) → `200 OK`.
+3. Click **Replay Exact Request** (Step 2) → `409 REPLAY_ATTACK`.
+4. Expected: HMAC ✓, Timestamp ✓, Nonce ✗.
+
+> *"The request was valid originally, but the nonce had already been used."*
+
+#### DEMO 4 — Expired Timestamp
+1. In **⚡ Security Demo**, find section **04 — Expired Timestamp Attack**.
+2. Click **Send Expired Timestamp** → `408 TIMESTAMP_EXPIRED`.
+3. The HMAC itself is valid (computed with the old timestamp), but the
+   timestamp is 10 minutes old — outside the 30-second window.
+
+> *"CipherGate prevents requests outside the configured freshness window."*
+
+#### DEMO 5 — Rate Limit Burst
+1. In **⚡ Security Demo**, find section **05 — Rate Limit Burst Attack**.
+2. Click **Send 25 Requests**.
+3. Watch the live progress dots: the first ~20 turn green (allowed), the
+   remaining turn red (429 RATE_LIMIT_EXCEEDED).
+
+> *"CipherGate limits each application independently."*
+
+#### After Each Demo
+Open **Dashboard** and **Security Events** to see all events reflected in
+real time — including HMAC failures, replay detections, timestamp expirations,
+and rate limit violations.
+
+### Testing
+
+The full test suite covers all CipherShop scenarios:
+
+```bash
+cd CipherGate-new/tests
+python -m pytest test_gateway.py test_ciphershop_integration.py -v
+```
+
+**31 tests total — 15 existing + 16 new CipherShop integration tests:**
+
+| Test | Expected Result |
+|---|---|
+| Valid payment allowed | 200 — decision.allowed = true |
+| Valid request reaches backend | response.message = "Payment request processed" |
+| All pipeline checks pass | All 5 checks = "passed" |
+| Tampered body rejected | 403 — HMAC_VERIFICATION_FAILED |
+| Tampered request skips backend | Backend-only fields absent |
+| Replay first request allowed | 200 OK |
+| Replay second request rejected | 409 — REPLAY_ATTACK |
+| Expired timestamp rejected | 408 — TIMESTAMP_EXPIRED |
+| Rate limit burst | 429 — RATE_LIMIT_EXCEEDED after ~20 |
+| Events appear in audit log | /audit/logs contains the events |
+| Blocked events logged | BLOCKED events in audit log |
+| Dashboard stats updated | Counters reflect CipherShop events |
+| Dashboard still works | All expected fields present |
+| Applications page still works | Lists apps; no hmac_secret exposed |
+| Request Editor still works | /gateway/request returns 200 |
+| Security Events page still works | /audit/logs returns structured records |
+
+### Files Added / Modified
+
+**New files:**
+- `frontend/src/pages/CipherShop.jsx` — Shop storefront + checkout + auto-registration
+- `frontend/src/pages/CipherShop.css` — Styles (amber accent to distinguish client from gateway)
+- `frontend/src/pages/SecurityDemo.jsx` — 5 attack demos with live results
+- `frontend/src/pages/SecurityDemo.css` — Attack simulator styles
+- `tests/test_ciphershop_integration.py` — 16 integration tests
+
+**Modified files:**
+- `frontend/src/App.jsx` — Added CipherShop + SecurityDemo routes
+- `frontend/src/components/Layout.jsx` — Added 🛒 CipherShop and ⚡ Security Demo nav items
+- `frontend/src/components/Layout.css` — Added `.shell__nav-item--shop` style
+
+**Unchanged (verified):**
+- All backend files (zero backend changes required)
+- `frontend/src/pages/Dashboard.jsx`
+- `frontend/src/pages/PaymentPage.jsx`
+- `frontend/src/pages/RequestEditor.jsx`
+- `frontend/src/pages/Applications.jsx`
+- `frontend/src/pages/SecurityEvents.jsx`
+- `frontend/src/pages/Settings.jsx`
+- `frontend/src/services/crypto.js` (reused as-is)
+- `frontend/src/services/api.js` (reused as-is)
+- `tests/test_gateway.py` (all 15 tests still pass)

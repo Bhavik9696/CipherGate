@@ -23,6 +23,19 @@ def gen_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:16]}"
 
 
+class User(Base):
+    """A human dashboard user with email + password credentials."""
+
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=lambda: gen_id("usr"))
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String, nullable=True, default="")
+    created_at = Column(DateTime, default=now_utc)
+    is_active = Column(Boolean, default=True)
+
+
 class Application(Base):
     """A registered client application / demo credential set."""
 
@@ -63,6 +76,22 @@ class UsedNonce(Base):
     client_id = Column(String, nullable=False, index=True)
     nonce = Column(String, nullable=False, index=True)
     created_at = Column(DateTime, default=now_utc)
+
+
+class Order(Base):
+    """Tracks Razorpay orders and payments."""
+    __tablename__ = "orders"
+
+    id = Column(String, primary_key=True, default=lambda: gen_id("ord"))
+    user_id = Column(String, index=True, nullable=True) # Optional, depends on how auth works
+    product_name = Column(String, nullable=False)
+    amount = Column(Integer, nullable=False) # In paise
+    currency = Column(String, default="INR", nullable=False)
+    razorpay_order_id = Column(String, unique=True, index=True, nullable=False)
+    razorpay_payment_id = Column(String, unique=True, index=True, nullable=True)
+    status = Column(String, default="PENDING", nullable=False) # PENDING, PAID, FAILED
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 
 
 def init_db():
