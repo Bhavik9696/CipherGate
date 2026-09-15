@@ -1,4 +1,5 @@
 import "./Layout.css";
+import AssistantWidget from "./AssistantWidget.jsx";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard" },
@@ -69,6 +70,7 @@ export default function Layout({ active, onNavigate, children, user, onLogout })
         </div>
       </aside>
       <main className="shell__main">{children}</main>
+      <AssistantWidget />
     </div>
   );
 }

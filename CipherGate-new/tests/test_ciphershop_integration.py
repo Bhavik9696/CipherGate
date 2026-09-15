@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from conftest import sign_payment_request, sign_request
+from tests.conftest import sign_payment_request, sign_request
 
 
 # ---------------------------------------------------------------------------
