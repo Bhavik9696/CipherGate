@@ -1,9 +1,9 @@
-﻿"""
+"""
 CipherShop Integration Tests
 
-Verifies that the CipherShop â†’ CipherGate â†’ Demo Backend flow works correctly
+Verifies that the CipherShop → CipherGate → Demo Backend flow works correctly
 for all five demonstration scenarios. All tests use real HTTP requests against
-the actual CipherGate security pipeline â€” nothing is mocked.
+the actual CipherGate security pipeline — nothing is mocked.
 
 These tests complement (and do not replace) the existing test_gateway.py suite.
 """
@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from .conftest import sign_payment_request, sign_request
+from tests.conftest import sign_payment_request, sign_request
 
 
 # ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ def cs_body(amount=5000, product="Wireless Headphones - CipherShop"):
 
 
 # ---------------------------------------------------------------------------
-# 1. DEMO 1 â€” Normal payment flow
+# 1. DEMO 1 — Normal payment flow
 # ---------------------------------------------------------------------------
 
 def test_ciphershop_valid_payment_allowed(client, registered_app):
@@ -67,11 +67,11 @@ def test_ciphershop_all_pipeline_checks_pass(client, registered_app):
 
 
 # ---------------------------------------------------------------------------
-# 2. DEMO 2 â€” Request Tampering Attack
+# 2. DEMO 2 — Request Tampering Attack
 # ---------------------------------------------------------------------------
 
 def test_ciphershop_tampered_body_rejected(client, registered_app):
-    """Sign â‚¹5,000 body, send â‚¹50,000 body â€” HMAC mismatch blocks the request."""
+    """Sign ₹5,000 body, send ₹50,000 body — HMAC mismatch blocks the request."""
     # Sign the original body
     headers, _ = sign_payment_request(
         registered_app,
@@ -97,13 +97,13 @@ def test_ciphershop_tampered_request_does_not_reach_backend(client, registered_a
                                separators=(",", ":"))
     resp = client.post("/api/payment", headers=headers, content=tampered_raw)
     data = resp.json()
-    # Backend-only fields must be absent â€” demo backend was never called
+    # Backend-only fields must be absent — demo backend was never called
     assert "message" not in data or data.get("error") == "HMAC_VERIFICATION_FAILED"
     assert "amount" not in data
 
 
 # ---------------------------------------------------------------------------
-# 3. DEMO 3 â€” Replay Attack
+# 3. DEMO 3 — Replay Attack
 # ---------------------------------------------------------------------------
 
 def test_ciphershop_replay_first_request_allowed(client, registered_app):
@@ -134,7 +134,7 @@ def test_ciphershop_replay_second_request_rejected(client, registered_app):
 
 
 # ---------------------------------------------------------------------------
-# 4. DEMO 4 â€” Expired Timestamp Attack
+# 4. DEMO 4 — Expired Timestamp Attack
 # ---------------------------------------------------------------------------
 
 def test_ciphershop_expired_timestamp_rejected(client, registered_app):
@@ -153,7 +153,7 @@ def test_ciphershop_expired_timestamp_rejected(client, registered_app):
 
 
 # ---------------------------------------------------------------------------
-# 5. DEMO 5 â€” Rate Limit Burst
+# 5. DEMO 5 — Rate Limit Burst
 # ---------------------------------------------------------------------------
 
 def test_ciphershop_rate_limit_burst(client, registered_app):
@@ -280,4 +280,3 @@ def test_existing_security_events_page_still_works(client, registered_app):
     record = logs[0]
     for field in ["id", "timestamp", "endpoint", "event_type", "status"]:
         assert field in record, f"Missing field: {field}"
-

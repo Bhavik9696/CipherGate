@@ -31,6 +31,10 @@ export async function apiPostJson(path, body) {
   }
 }
 
+export async function askAssistant(question) {
+  return apiPostJson("/assistant/chat", { question });
+}
+
 /**
  * Sends a raw, already-serialized body with custom security headers -
  * used by the Request Editor so the bytes signed are exactly the bytes

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Real, end-to-end tests against the actual CipherGate pipeline.
 
 No mocking of the security checks - every test sends genuine HTTP requests
@@ -6,7 +6,16 @@ through FastAPI's TestClient and asserts on the real HTTP responses.
 """
 import time
 
-from .conftest import sign_payment_request, sign_request
+from tests.conftest import sign_payment_request, sign_request
+
+
+def test_assistant_returns_grounded_security_answer(client):
+    resp = client.post("/assistant/chat", json={"question": "How does HMAC stop tampering?"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert "HMAC-SHA256" in data["answer"]
+    assert data["sources"][0]["title"] == "HMAC request integrity"
 
 
 def test_valid_api_request_is_allowed(client, registered_app):
@@ -153,4 +162,3 @@ def test_dashboard_stats_reflect_real_events(client, registered_app):
     assert stats["total_requests"] >= 2
     assert stats["allowed"] >= 1
     assert stats["replay_attacks"] >= 1
-

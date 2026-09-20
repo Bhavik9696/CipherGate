@@ -35,6 +35,7 @@ from gateway.decision_engine import evaluate_request, DecisionResult
 from audit.logger import log_event
 from api.demo_backend import process_payment
 from api.razorpay_routes import router as razorpay_router
+from assistant.rag import answer as answer_assistant
 
 app = FastAPI(title="CipherGate", version="1.0.0")
 app.include_router(razorpay_router)
@@ -84,6 +85,10 @@ class GatewayRequest(BaseModel):
     body: Optional[dict] = None
 
 
+class AssistantRequest(BaseModel):
+    question: str
+
+
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
@@ -91,6 +96,15 @@ class GatewayRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "CipherGate", "time": time.time()}
+
+
+@app.post("/assistant/chat")
+def assistant_chat(payload: AssistantRequest):
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail={"message": "Ask a question about CipherGate security."})
+    result = answer_assistant(question)
+    return {"success": True, "question": question, **result}
 
 
 # ---------------------------------------------------------------------------

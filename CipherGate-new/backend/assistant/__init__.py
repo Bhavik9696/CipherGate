@@ -1,0 +1,1 @@
+"""Grounded assistant services for the CipherGate console."""
