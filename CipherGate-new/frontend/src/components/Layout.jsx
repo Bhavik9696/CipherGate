@@ -8,8 +8,6 @@ const NAV = [
   { key: "events", label: "Security Events" },
   { key: "settings", label: "Settings" },
   { key: "_sep", label: "", separator: true },
-  { key: "ciphershop", label: "🛒 CipherShop" },
-  { key: "security-demo", label: "⚡ Security Demo" },
 ];
 
 export default function Layout({ active, onNavigate, children, user, onLogout }) {
@@ -33,7 +31,7 @@ export default function Layout({ active, onNavigate, children, user, onLogout })
                 <div key={item.key} style={{ margin: "8px 0", borderTop: "1px solid var(--border-soft)" }} />
               );
             }
-            const isShopItem = item.key === "ciphershop" || item.key === "security-demo";
+            const isShopItem = false;
             return (
               <button
                 key={item.key}
@@ -62,7 +60,7 @@ export default function Layout({ active, onNavigate, children, user, onLogout })
             <span>Gateway online</span>
             {onLogout && (
               <button id="btn-logout" className="shell__logout-btn" onClick={onLogout} title="Sign out">
-                ⏏
+                Ã¢ÂÂ
               </button>
             )}
           </div>

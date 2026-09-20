@@ -1,4 +1,4 @@
-"""
+﻿"""
 Real, end-to-end tests against the actual CipherGate pipeline.
 
 No mocking of the security checks - every test sends genuine HTTP requests
@@ -6,7 +6,7 @@ through FastAPI's TestClient and asserts on the real HTTP responses.
 """
 import time
 
-from conftest import sign_payment_request, sign_request
+from .conftest import sign_payment_request, sign_request
 
 
 def test_valid_api_request_is_allowed(client, registered_app):
@@ -153,3 +153,4 @@ def test_dashboard_stats_reflect_real_events(client, registered_app):
     assert stats["total_requests"] >= 2
     assert stats["allowed"] >= 1
     assert stats["replay_attacks"] >= 1
+

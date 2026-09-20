@@ -7,8 +7,6 @@ import RequestEditor from "./pages/RequestEditor.jsx";
 import Applications from "./pages/Applications.jsx";
 import SecurityEvents from "./pages/SecurityEvents.jsx";
 import Settings from "./pages/Settings.jsx";
-import CipherShop from "./pages/CipherShop.jsx";
-import SecurityDemo from "./pages/SecurityDemo.jsx";
 
 export default function App() {
   // Check if we already have a saved session
@@ -25,7 +23,6 @@ export default function App() {
 
   const [active, setActive] = useState("dashboard");
   const [lastCredentials, setLastCredentials] = useState(null);
-  const [demoTransaction, setDemoTransaction] = useState(null);
 
   function handleAuth(userData) {
     setUser(userData);
@@ -54,18 +51,7 @@ export default function App() {
       )}
       {active === "events" && <SecurityEvents />}
       {active === "settings" && <Settings />}
-      {active === "ciphershop" && (
-        <CipherShop onNavigateToSecurityDemo={(data) => {
-          setDemoTransaction(data);
-          setActive("security-demo");
-        }} />
-      )}
-      {active === "security-demo" && (
-        <SecurityDemo
-          onNavigateToShop={() => setActive("ciphershop")}
-          transactionData={demoTransaction}
-        />
-      )}
     </Layout>
   );
 }
+

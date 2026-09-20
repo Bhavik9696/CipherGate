@@ -1,62 +1,101 @@
-import { useState, useEffect } from "react";
-import { Page, Panel, Button, EmptyState } from "../components/Primitives.jsx";
-import SecurityPipeline from "../components/SecurityPipeline.jsx";
-import { generateTimestamp, generateNonce, signRequest } from "../services/crypto.js";
-import { apiPostRaw, apiGet, apiPostJson, BASE_URL } from "../services/api.js";
+import { useState, useEffect, useCallback } from "react";
+import { Page, Panel, EmptyState } from "../components/Primitives.jsx";
+import { apiGet, apiPostJson } from "../services/api.js";
 import "./PaymentPage.css";
 
-const PAYMENT_METHODS = [
-  { id: "card", label: "Credit Card", icon: "💳" },
-  { id: "bank", label: "Bank Transfer", icon: "🏦" },
-  { id: "crypto", label: "Crypto", icon: "₿" },
+const PLANS = [
+  {
+    id: "starter",
+    name: "CipherGate Starter",
+    amount: "999.00",
+    currency: "INR",
+    period: "/mo",
+    features: "10k req/min • 1 Application • Standard Rate Limiting",
+    icon: "⚡",
+  },
+  {
+    id: "pro",
+    name: "CipherGate Pro",
+    amount: "3999.00",
+    currency: "INR",
+    period: "/mo",
+    features: "50k req/min • Unlimited Apps • Zero-Trust HMAC & Replay Defense",
+    icon: "🛡️",
+    popular: true,
+  },
+  {
+    id: "enterprise",
+    name: "CipherGate Enterprise",
+    amount: "9999.00",
+    currency: "INR",
+    period: "/mo",
+    features: "Unlimited req • Dedicated Gateway • Custom Security Decision Rules",
+    icon: "👑",
+  },
 ];
 
-export default function PaymentPage({ credentials }) {
+const PAYMENT_METHODS = [
+  { id: "card", label: "Card / UPI / Netbanking", icon: "💳" },
+  { id: "bank", label: "Bank Transfer", icon: "🏦" },
+  { id: "crypto", label: "Corporate Billing", icon: "🏢" },
+];
+
+export default function PaymentPage() {
+  const [selectedPlan, setSelectedPlan] = useState(PLANS[1]);
   const [receiver, setReceiver] = useState("CipherGate Pro Subscription");
-  const [amount, setAmount] = useState("49.00");
+  const [amount, setAmount] = useState("3999.00");
+  const [currency, setCurrency] = useState("INR");
   const [method, setMethod] = useState("card");
 
-  // Card mockup state
-  const [cardNumber, setCardNumber] = useState("4532 •••• •••• 8892");
-  const [cardHolder, setCardHolder] = useState("ALEXANDER RIVERS");
-  const [cardExpiry, setCardExpiry] = useState("08/29");
-  const [cardCvv, setCardCvv] = useState("731");
+  // User details for prefill
+  const [customerName, setCustomerName] = useState(() => localStorage.getItem("cg_user_name") || "CipherGate User");
+  const [customerEmail, setCustomerEmail] = useState(() => localStorage.getItem("cg_user_email") || "user@ciphergate.local");
+  const [customerPhone, setCustomerPhone] = useState("9999999999");
 
-  // Auth / Gateway credentials (managed behind the scenes)
-  const [apiKey, setApiKey] = useState(credentials?.api_key || "");
-  const [hmacSecret, setHmacSecret] = useState(credentials?.hmac_secret || "");
+  // Razorpay config
   const [razorpayKeyId, setRazorpayKeyId] = useState("");
 
-  // Transaction execution state
+  // Transaction & Subscription state
   const [processing, setProcessing] = useState(false);
   const [lastTxResult, setLastTxResult] = useState(null);
   const [txHistory, setTxHistory] = useState([]);
+  const [subscription, setSubscription] = useState({ active: false, plan: null });
 
-  // Auto-provision internal credentials for the payment if missing
-  useEffect(() => {
-    // Fetch Razorpay config
-    apiGet("/api/razorpay/config").then((res) => {
-      if (res.status === 200 && res.data?.key_id) {
-        setRazorpayKeyId(res.data.key_id);
+  // Load Razorpay config, active subscription, and order history
+  const loadData = useCallback(async () => {
+    try {
+      const [configRes, subRes, ordersRes] = await Promise.all([
+        apiGet("/api/razorpay/config"),
+        apiGet("/api/razorpay/subscription"),
+        apiGet("/api/razorpay/orders"),
+      ]);
+
+      if (configRes.status === 200 && configRes.data?.key_id) {
+        setRazorpayKeyId(configRes.data.key_id);
       }
-    });
 
-    if (!apiKey || !hmacSecret) {
-      fetch(`${BASE_URL}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "CipherGate Billing Service" }),
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.api_key) {
-            setApiKey(data.api_key);
-            setHmacSecret(data.hmac_secret);
-          }
-        })
-        .catch(e => console.error("Could not provision billing creds", e));
+      if (subRes.status === 200 && subRes.data?.active) {
+        setSubscription(subRes.data);
+      }
+
+      if (ordersRes.status === 200 && Array.isArray(ordersRes.data)) {
+        setTxHistory(ordersRes.data);
+      }
+    } catch (e) {
+      console.error("Failed to load payment info:", e);
     }
-  }, [apiKey, hmacSecret]);
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSelectPlan = (plan) => {
+    setSelectedPlan(plan);
+    setReceiver(plan.name);
+    setAmount(plan.amount);
+    setCurrency(plan.currency);
+  };
 
   const handlePay = async (e) => {
     e?.preventDefault();
@@ -66,173 +105,295 @@ export default function PaymentPage({ credentials }) {
 
     const parsedAmount = Number(amount);
 
-    // 1. Create Razorpay order
+    // 1. Create Razorpay order via backend
     const orderRes = await apiPostJson("/api/razorpay/create_order", {
       product_name: receiver,
       amount: parsedAmount,
-      currency: "USD"
+      currency: currency || "INR",
     });
 
     if (!orderRes || orderRes.status !== 200 || !orderRes.data?.order_id) {
       setProcessing(false);
-      const errMsg = orderRes?.data?.detail || "Failed to create Razorpay order. Check your Razorpay keys in .env.";
+      const errMsg = orderRes?.data?.detail || "Failed to create Razorpay order. Check Razorpay keys in backend/.env.";
+      const txRecord = {
+        id: "tx_err_" + Math.random().toString(36).substring(2, 9),
+        created_at: new Date().toISOString(),
+        amount: parsedAmount,
+        currency: currency || "INR",
+        product_name: receiver,
+        status: "FAILED",
+        reason: errMsg,
+      };
       setLastTxResult({
-        res: { status: 500, data: { message: errMsg } },
-        record: {
-          id: "tx_" + Math.random().toString(36).substring(2, 9),
-          time: new Date().toLocaleTimeString(),
-          amount: parsedAmount,
-          receiver,
-          allowed: false,
-          reason: "Order Creation Failed",
-        }
+        success: false,
+        status: 500,
+        message: errMsg,
+        record: txRecord,
       });
       return;
     }
 
-    const { order_id } = orderRes.data;
+    const { order_id, amount: orderAmountPaise, currency: orderCurrency } = orderRes.data;
+
+    // Check if Razorpay Checkout script is loaded
+    if (!window.Razorpay) {
+      setProcessing(false);
+      alert("Razorpay SDK not loaded. Please check your internet connection.");
+      return;
+    }
 
     // 2. Initialize Razorpay Checkout
     const options = {
       key: razorpayKeyId,
-      amount: orderRes.data.amount,
-      currency: orderRes.data.currency,
-      name: receiver,
-      description: "CipherGate Pro Subscription",
+      amount: orderAmountPaise,
+      currency: orderCurrency || "INR",
+      name: "CipherGate Security",
+      description: receiver,
       order_id: order_id,
-      handler: async function (response) {
-        // 3. Verify payment signature on backend
-        const verifyRes = await apiPostJson("/api/razorpay/verify", {
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature,
-        });
-
-        if (verifyRes?.status === 200) {
-          // 4. Send securely to our Zero-Trust Gateway
-          const payloadStr = JSON.stringify({
-            amount: parsedAmount,
-            receiver,
-            method,
-            currency: "USD",
-            razorpay_payment_id: response.razorpay_payment_id,
-            timestamp: new Date().toISOString(),
-          });
-
-          const timestamp = generateTimestamp();
-          const nonce = generateNonce();
-          const signature = await signRequest("POST", "/api/payment", timestamp, nonce, payloadStr, hmacSecret);
-
-          const gatewayRes = await apiPostRaw("/api/payment", payloadStr, {
-            "X-API-Key": apiKey,
-            "X-Timestamp": timestamp,
-            "X-Nonce": nonce,
-            "X-Signature": signature,
-          });
-
-          const isAllowed = gatewayRes?.status === 200 && gatewayRes?.data?.decision?.allowed;
-          const txRecord = {
-            id: response.razorpay_payment_id,
-            time: new Date().toLocaleTimeString(),
-            amount: parsedAmount,
-            receiver,
-            allowed: isAllowed,
-            reason: isAllowed ? "Payment authorized & secured by Gateway" : (gatewayRes?.data?.message || "Gateway Rejected"),
-            checks: gatewayRes?.data?.decision?.checks
-          };
-
-          setLastTxResult({ res: gatewayRes, record: txRecord });
-          setTxHistory((prev) => [txRecord, ...prev]);
-        } else {
-          const txRecord = {
-            id: response.razorpay_payment_id,
-            time: new Date().toLocaleTimeString(),
-            amount: parsedAmount,
-            receiver,
-            allowed: false,
-            reason: "Signature Verification Failed",
-            checks: { signature: "failed" }
-          };
-          setLastTxResult({ res: verifyRes, record: txRecord });
-          setTxHistory((prev) => [txRecord, ...prev]);
-        }
-        setProcessing(false);
-      },
       prefill: {
-        name: cardHolder,
-        email: "demo@ciphergate.local",
-        contact: "9999999999"
+        name: customerName,
+        email: customerEmail,
+        contact: customerPhone,
       },
       theme: {
-        color: "#2FD4E0"
+        color: "#2FD4E0",
+      },
+      handler: async function (response) {
+        // 3. Verify payment signature on backend
+        try {
+          const verifyRes = await apiPostJson("/api/razorpay/verify", {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+
+          if (verifyRes?.status === 200 && verifyRes.data?.success) {
+            // Payment verified & subscription activated
+            const txRecord = {
+              id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              created_at: new Date().toISOString(),
+              amount: parsedAmount,
+              currency: orderCurrency || "INR",
+              product_name: receiver,
+              status: "PAID",
+              reason: "Payment verified by Razorpay & subscription activated",
+            };
+
+            setLastTxResult({
+              success: true,
+              status: 200,
+              message: "Payment successfully verified! Your CipherGate Pro subscription is now active.",
+              record: txRecord,
+            });
+
+            setSubscription({
+              active: true,
+              plan: receiver,
+              amount: parsedAmount,
+              currency: orderCurrency || "INR",
+              payment_id: response.razorpay_payment_id,
+              order_id: response.razorpay_order_id,
+            });
+
+            // Reload database orders to keep UI synced
+            loadData();
+          } else {
+            const txRecord = {
+              id: response.razorpay_payment_id || "unverified",
+              razorpay_order_id: response.razorpay_order_id,
+              created_at: new Date().toISOString(),
+              amount: parsedAmount,
+              currency: orderCurrency || "INR",
+              product_name: receiver,
+              status: "FAILED",
+              reason: verifyRes?.data?.detail || "Payment signature verification failed.",
+            };
+            setLastTxResult({
+              success: false,
+              status: verifyRes?.status || 400,
+              message: verifyRes?.data?.detail || "Payment signature verification failed.",
+              record: txRecord,
+            });
+            loadData();
+          }
+        } catch (err) {
+          setLastTxResult({
+            success: false,
+            status: 500,
+            message: "Error during payment verification: " + (err.message || String(err)),
+            record: {
+              id: response.razorpay_payment_id || "err",
+              created_at: new Date().toISOString(),
+              amount: parsedAmount,
+              currency: orderCurrency || "INR",
+              product_name: receiver,
+              status: "FAILED",
+            },
+          });
+        } finally {
+          setProcessing(false);
+        }
       },
       modal: {
         ondismiss: function () {
           setProcessing(false);
-        }
-      }
+        },
+      },
     };
 
-    if (!window.Razorpay) {
-      setProcessing(false);
-      alert("Razorpay SDK not loaded. Check your internet connection.");
-      return;
-    }
-
     const rzp = new window.Razorpay(options);
-    rzp.on('payment.failed', function (response) {
+
+    rzp.on("payment.failed", function (response) {
+      const errorDesc = response.error?.description || "Payment failed or was declined.";
       const txRecord = {
-        id: response.error.metadata.payment_id || "failed_" + Math.random().toString(36).substring(2, 9),
-        time: new Date().toLocaleTimeString(),
+        id: response.error?.metadata?.payment_id || "failed_" + Math.random().toString(36).substring(2, 9),
+        razorpay_order_id: response.error?.metadata?.order_id || order_id,
+        created_at: new Date().toISOString(),
         amount: parsedAmount,
-        receiver,
-        allowed: false,
-        reason: response.error.description || "Payment Failed",
+        currency: orderCurrency || "INR",
+        product_name: receiver,
+        status: "FAILED",
+        reason: errorDesc,
       };
-      setLastTxResult({ res: { status: 400, data: { message: response.error.description } }, record: txRecord });
+
+      setLastTxResult({
+        success: false,
+        status: 400,
+        message: errorDesc,
+        record: txRecord,
+      });
+
       setTxHistory((prev) => [txRecord, ...prev]);
       setProcessing(false);
     });
+
     rzp.open();
   };
 
-  const checks = lastTxResult?.res?.data?.decision?.checks;
-  const isAllowed = lastTxResult?.res?.data?.decision?.allowed;
+  const isSuccess = lastTxResult?.success;
 
   return (
     <Page
       eyebrow="Billing & Subscription"
-      title="Upgrade to CipherGate Pro"
-      subtitle="Unlock enterprise features and higher rate limits for your security gateway."
+      title="CipherGate Plans & Subscription Checkout"
+      subtitle="Upgrade CipherGate to unlock higher rate limits, multi-app routing, and enterprise Zero-Trust API protection."
     >
-      <div className="pay-root">
-        {/* Left Column: Form & Payment Flow */}
-        <div className="pay-form-col">
-          {/* Card Visual Preview */}
-          <div className="pay-card-visual">
-            <div className="pay-card__chip" />
-            <div className="pay-card__network">CIPHERGATE</div>
-            <div className="pay-card__number">
-              {cardNumber || "•••• •••• •••• ••••"}
-            </div>
-            <div className="pay-card__footer">
-              <div>
-                <div className="pay-card__field-label">Card Holder</div>
-                <div className="pay-card__field-value">
-                  {cardHolder || "YOUR NAME"}
-                </div>
+      {/* Active Subscription Banner */}
+      {subscription.active && (
+        <div style={{
+          background: "rgba(51, 224, 138, 0.12)",
+          border: "1px solid rgba(51, 224, 138, 0.35)",
+          borderRadius: "var(--radius-lg)",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "12px"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "24px" }}>✨</span>
+            <div>
+              <div style={{ fontWeight: "700", color: "var(--success)", fontSize: "15px" }}>
+                Active Subscription: {subscription.plan || "CipherGate Pro"}
               </div>
-              <div>
-                <div className="pay-card__field-label">Expires</div>
-                <div className="pay-card__field-value">
-                  {cardExpiry || "MM/YY"}
-                </div>
+              <div style={{ fontSize: "12.5px", color: "var(--text-dim)" }}>
+                Verified via Razorpay Payment ID: <code className="mono">{subscription.payment_id}</code>
               </div>
             </div>
           </div>
+          <span style={{
+            background: "var(--success)",
+            color: "#04151a",
+            fontWeight: "700",
+            fontSize: "12px",
+            padding: "4px 12px",
+            borderRadius: "20px",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em"
+          }}>
+            Active
+          </span>
+        </div>
+      )}
+
+      <div className="pay-root">
+        {/* Left Column: Plan Picker & Payment Form */}
+        <div className="pay-form-col">
+          {/* Plan Selection Cards */}
+          <Panel title="Choose Subscription Tier">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+              {PLANS.map((plan) => {
+                const isSelected = selectedPlan?.id === plan.id;
+                return (
+                  <div
+                    key={plan.id}
+                    onClick={() => handleSelectPlan(plan)}
+                    style={{
+                      background: isSelected ? "var(--accent-dim)" : "var(--bg-raised)",
+                      border: isSelected ? "2px solid var(--accent)" : "1px solid var(--border)",
+                      borderRadius: "var(--radius)",
+                      padding: "16px",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      position: "relative",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    {plan.popular && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: "-10px",
+                          right: "12px",
+                          background: "var(--accent)",
+                          color: "#04151a",
+                          fontSize: "10px",
+                          fontWeight: "800",
+                          padding: "2px 8px",
+                          borderRadius: "10px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                        }}
+                      >
+                        Recommended
+                      </span>
+                    )}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: "20px" }}>{plan.icon}</span>
+                      <div style={{
+                        width: "18px",
+                        height: "18px",
+                        borderRadius: "50%",
+                        border: isSelected ? "5px solid var(--accent)" : "2px solid var(--border)",
+                        background: isSelected ? "#fff" : "transparent"
+                      }} />
+                    </div>
+                    <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "14px" }}>
+                      {plan.name}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "2px" }}>
+                      <span style={{ fontSize: "18px", fontWeight: "800", color: "var(--text)" }}>
+                        ₹{Number(plan.amount).toLocaleString("en-IN")}
+                      </span>
+                      <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>{plan.period}</span>
+                    </div>
+                    <div style={{ fontSize: "11.5px", color: "var(--text-dim)", lineHeight: "1.4", marginTop: "4px" }}>
+                      {plan.features}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
 
           {/* Payment Method Selector */}
-          <Panel title="Select Payment Method">
+          <Panel title="Select Payment Gateway Mode">
             <div className="pay-methods">
               {PAYMENT_METHODS.map((m) => (
                 <button
@@ -248,27 +409,27 @@ export default function PaymentPage({ credentials }) {
             </div>
           </Panel>
 
-          {/* Payment Details Form */}
-          <Panel title="Transaction Details">
+          {/* Customer & Checkout Form */}
+          <Panel title="Billing Information">
             <form onSubmit={handlePay} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div className="pay-row">
                 <div className="pay-field">
-                  <label className="pay-label">Recipient / Merchant</label>
+                  <label className="pay-label">Subscription Tier</label>
                   <div className="pay-input-wrap">
-                    <span className="pay-input-icon">🏢</span>
+                    <span className="pay-input-icon">🛡️</span>
                     <input
                       className="pay-input"
                       value={receiver}
                       onChange={(e) => setReceiver(e.target.value)}
-                      placeholder="e.g. Acme Corp"
+                      placeholder="e.g. CipherGate Pro Subscription"
                       required
                     />
                   </div>
                 </div>
                 <div className="pay-field">
-                  <label className="pay-label">Amount (USD)</label>
+                  <label className="pay-label">Amount (INR ₹)</label>
                   <div className="pay-input-wrap">
-                    <span className="pay-input-icon">$</span>
+                    <span className="pay-input-icon">₹</span>
                     <input
                       type="number"
                       step="0.01"
@@ -282,86 +443,54 @@ export default function PaymentPage({ credentials }) {
                 </div>
               </div>
 
-              {method === "card" && (
-                <>
-                  <div className="pay-field">
-                    <label className="pay-label">Cardholder Name</label>
-                    <div className="pay-input-wrap">
-                      <span className="pay-input-icon">👤</span>
-                      <input
-                        className="pay-input"
-                        value={cardHolder}
-                        onChange={(e) => setCardHolder(e.target.value)}
-                      />
-                    </div>
+              <div className="pay-row">
+                <div className="pay-field">
+                  <label className="pay-label">Customer Name</label>
+                  <div className="pay-input-wrap">
+                    <span className="pay-input-icon">👤</span>
+                    <input
+                      className="pay-input"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Your full name"
+                      required
+                    />
                   </div>
-
-                  <div className="pay-row-3">
-                    <div className="pay-field">
-                      <label className="pay-label">Card Number</label>
-                      <div className="pay-input-wrap">
-                        <span className="pay-input-icon">💳</span>
-                        <input
-                          className="pay-input pay-input--mono"
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="pay-field">
-                      <label className="pay-label">Expires</label>
-                      <input
-                        className="pay-input pay-input--mono"
-                        style={{ paddingLeft: 12 }}
-                        value={cardExpiry}
-                        onChange={(e) => setCardExpiry(e.target.value)}
-                        placeholder="MM/YY"
-                      />
-                    </div>
-                    <div className="pay-field">
-                      <label className="pay-label">CVC / CVV</label>
-                      <input
-                        type="password"
-                        maxLength={4}
-                        className="pay-input pay-input--mono"
-                        style={{ paddingLeft: 12 }}
-                        value={cardCvv}
-                        onChange={(e) => setCardCvv(e.target.value)}
-                        placeholder="123"
-                      />
-                    </div>
+                </div>
+                <div className="pay-field">
+                  <label className="pay-label">Billing Email</label>
+                  <div className="pay-input-wrap">
+                    <span className="pay-input-icon">✉️</span>
+                    <input
+                      type="email"
+                      className="pay-input"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      placeholder="name@example.com"
+                      required
+                    />
                   </div>
-                </>
-              )}
-
-
+                </div>
+              </div>
 
               <button
                 type="submit"
                 className="pay-submit"
-                disabled={processing || !apiKey}
+                disabled={processing || !razorpayKeyId}
               >
                 {processing ? (
                   <>
                     <span className="pay-submit__spinner" />
-                    Authenticating & Signing...
+                    Connecting to Razorpay Checkout...
                   </>
                 ) : (
                   <>
-                    <span>🛡️ Authorize Payment (${Number(amount || 0).toFixed(2)})</span>
+                    <span>💳 Pay ₹{Number(amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })} with Razorpay</span>
                   </>
                 )}
               </button>
             </form>
           </Panel>
-
-          {/* Live Pipeline Check Visualizer */}
-          {checks && (
-            <div className="pay-pipeline-wrap">
-              <div className="pay-pipeline-label">CipherGate Gateway Pipeline Verdict</div>
-              <SecurityPipeline checks={checks} allowed={isAllowed} />
-            </div>
-          )}
         </div>
 
         {/* Right Column: Order Summary & Transaction History */}
@@ -369,35 +498,35 @@ export default function PaymentPage({ credentials }) {
           {/* Order Summary */}
           <div className="pay-summary">
             <div className="pay-summary__header">
-              <div className="pay-summary__title">Order Summary</div>
+              <div className="pay-summary__title">Subscription Checkout Summary</div>
             </div>
             <div className="pay-summary__body">
               <div className="pay-item">
-                <span className="pay-item__label">Merchant</span>
-                <span className="pay-item__value">{receiver || "CipherGate"}</span>
+                <span className="pay-item__label">Product</span>
+                <span className="pay-item__value">{receiver || "CipherGate Subscription"}</span>
               </div>
               <div className="pay-item">
-                <span className="pay-item__label">Service</span>
-                <span className="pay-item__value">Zero-Trust API Pass</span>
+                <span className="pay-item__label">Payment Gateway</span>
+                <span className="pay-item__value pay-item__value--accent">Razorpay Standard</span>
               </div>
               <div className="pay-item">
-                <span className="pay-item__label">Encryption</span>
-                <span className="pay-item__value pay-item__value--accent">HMAC-SHA256</span>
+                <span className="pay-item__label">Verification</span>
+                <span className="pay-item__value">HMAC-SHA256 Sig</span>
               </div>
               <div className="pay-divider" />
               <div className="pay-total">
                 <span className="pay-total__label">Total Due</span>
                 <span className="pay-total__amount">
-                  ${Number(amount || 0).toFixed(2)}
+                  ₹{Number(amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </span>
               </div>
 
               <div className="pay-security-badge">
                 <span className="pay-security-badge__icon">🔒</span>
                 <div>
-                  <strong>Protected by CipherGate</strong>
+                  <strong>Server-Side Verified</strong>
                   <br />
-                  Payload signed on client before transmission.
+                  Razorpay cryptographic signature verified on backend before activation.
                 </div>
               </div>
             </div>
@@ -406,79 +535,81 @@ export default function PaymentPage({ credentials }) {
           {/* Result Banner if transaction occurred */}
           {lastTxResult && (
             <div
-              className={`pay-result ${isAllowed ? "pay-result--success" : "pay-result--blocked"
-                }`}
+              className={`pay-result ${isSuccess ? "pay-result--success" : "pay-result--blocked"}`}
             >
               <div className="pay-result__icon">
-                {isAllowed ? "✅" : "🚨"}
+                {isSuccess ? "✅" : "🚨"}
               </div>
               <div className="pay-result__title">
-                {isAllowed ? "Payment Authorized" : "Transaction Blocked"}
+                {isSuccess ? "Payment Verified & Activated" : "Payment Failed / Cancelled"}
               </div>
               <div className="pay-result__sub">
-                {isAllowed
-                  ? "The payment passed all 5 Zero-Trust security checkpoints successfully."
-                  : lastTxResult.res?.data?.message || "CipherGate rejected this request."}
+                {lastTxResult.message}
               </div>
 
               <div className="pay-result__details">
                 <div className="pay-result__row">
-                  <span className="pay-result__row-label">Status Code</span>
-                  <span className="pay-result__row-value">
-                    HTTP {lastTxResult.res?.status}
+                  <span className="pay-result__row-label">Status</span>
+                  <span className="pay-result__row-value" style={{ color: isSuccess ? "var(--success)" : "var(--danger)" }}>
+                    {isSuccess ? "PAID (Verified)" : "FAILED"}
                   </span>
                 </div>
-                <div className="pay-result__row">
-                  <span className="pay-result__row-label">Check Failure</span>
-                  <span className="pay-result__row-value" style={{ color: isAllowed ? "var(--success)" : "var(--danger)" }}>
-                    {lastTxResult.res?.data?.security_check || "None (Passed)"}
-                  </span>
-                </div>
-                <div className="pay-result__row">
-                  <span className="pay-result__row-label">Tx ID</span>
-                  <span className="pay-result__row-value">
-                    {lastTxResult.record.id}
-                  </span>
-                </div>
+                {lastTxResult.record?.id && (
+                  <div className="pay-result__row">
+                    <span className="pay-result__row-label">Payment ID</span>
+                    <span className="pay-result__row-value">
+                      {lastTxResult.record.id}
+                    </span>
+                  </div>
+                )}
+                {lastTxResult.record?.razorpay_order_id && (
+                  <div className="pay-result__row">
+                    <span className="pay-result__row-label">Order ID</span>
+                    <span className="pay-result__row-value">
+                      {lastTxResult.record.razorpay_order_id}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Recent Transaction Log */}
+          {/* Payment & Order History */}
           <div className="pay-history">
             <div className="pay-history__header">
-              <span className="pay-history__title">Recent Session Payments</span>
+              <span className="pay-history__title">Order History & Subscriptions</span>
               <span className="pay-history__count">{txHistory.length}</span>
             </div>
             <div className="pay-history__list">
               {txHistory.length === 0 ? (
                 <EmptyState
-                  title="No payments made"
-                  subtitle="Authorized & blocked attempts will appear here."
+                  title="No payments yet"
+                  subtitle="Completed Razorpay payments will appear here."
                 />
               ) : (
-                txHistory.map((tx) => (
-                  <div className="pay-tx" key={tx.id}>
-                    <div
-                      className={`pay-tx__icon ${tx.allowed ? "pay-tx__icon--success" : "pay-tx__icon--blocked"
-                        }`}
-                    >
-                      {tx.allowed ? "✓" : "✕"}
-                    </div>
-                    <div className="pay-tx__info">
-                      <div className="pay-tx__receiver">{tx.receiver}</div>
-                      <div className="pay-tx__time">
-                        {tx.time} • {tx.reason}
+                txHistory.map((tx) => {
+                  const isPaid = tx.status === "PAID";
+                  return (
+                    <div className="pay-tx" key={tx.id || tx.razorpay_order_id}>
+                      <div
+                        className={`pay-tx__icon ${isPaid ? "pay-tx__icon--success" : "pay-tx__icon--blocked"}`}
+                      >
+                        {isPaid ? "✓" : "✕"}
+                      </div>
+                      <div className="pay-tx__info">
+                        <div className="pay-tx__receiver">{tx.product_name || "CipherGate Subscription"}</div>
+                        <div className="pay-tx__time">
+                          {tx.created_at ? new Date(tx.created_at.includes("Z") ? tx.created_at : tx.created_at + "Z").toLocaleDateString() : "Recent"} • {tx.status} {tx.razorpay_payment_id ? `(${tx.razorpay_payment_id})` : ""}
+                        </div>
+                      </div>
+                      <div
+                        className={`pay-tx__amount ${isPaid ? "pay-tx__amount--success" : "pay-tx__amount--blocked"}`}
+                      >
+                        ₹{(Number(tx.amount) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </div>
                     </div>
-                    <div
-                      className={`pay-tx__amount ${tx.allowed ? "pay-tx__amount--success" : "pay-tx__amount--blocked"
-                        }`}
-                    >
-                      ${tx.amount.toFixed(2)}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -487,3 +618,4 @@ export default function PaymentPage({ credentials }) {
     </Page>
   );
 }
+

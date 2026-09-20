@@ -1,6 +1,7 @@
 import os
 import razorpay
 from dotenv import load_dotenv
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -29,6 +30,7 @@ def get_razorpay_client():
 class CreateOrderRequest(BaseModel):
     product_name: str
     amount: float # E.g., 49.00 (INR)
+    currency: Optional[str] = "INR"
 
 class VerifyPaymentRequest(BaseModel):
     razorpay_order_id: str
@@ -42,12 +44,46 @@ def get_config():
         raise HTTPException(status_code=500, detail="Razorpay Key ID not configured. Set RAZORPAY_KEY_ID in backend/.env")
     return {"key_id": key_id}
 
+@router.get("/subscription")
+def get_subscription(db: Session = Depends(get_db)):
+    """Returns current active subscription status based on verified payments."""
+    latest_paid = db.query(Order).filter(Order.status == "PAID").order_by(Order.updated_at.desc()).first()
+    if latest_paid:
+        return {
+            "active": True,
+            "plan": latest_paid.product_name,
+            "amount": latest_paid.amount / 100.0,
+            "currency": latest_paid.currency,
+            "payment_id": latest_paid.razorpay_payment_id,
+            "order_id": latest_paid.razorpay_order_id,
+            "activated_at": latest_paid.updated_at.isoformat() if latest_paid.updated_at else None,
+        }
+    return {"active": False, "plan": None}
+
+@router.get("/orders")
+def get_orders(db: Session = Depends(get_db)):
+    """Returns past orders from the database."""
+    orders = db.query(Order).order_by(Order.created_at.desc()).limit(20).all()
+    return [
+        {
+            "id": o.id,
+            "product_name": o.product_name,
+            "amount": o.amount / 100.0,
+            "currency": o.currency,
+            "razorpay_order_id": o.razorpay_order_id,
+            "razorpay_payment_id": o.razorpay_payment_id,
+            "status": o.status,
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+        }
+        for o in orders
+    ]
+
 @router.post("/create_order")
 def create_order(request: CreateOrderRequest, db: Session = Depends(get_db)):
     client = get_razorpay_client()
     
-    currency = "INR"
-    amount_in_paise = int(request.amount * 100)
+    currency = (request.currency or "INR").upper()
+    amount_in_paise = int(round(request.amount * 100))
     
     # 1. Create Internal Order (PENDING)
     internal_order = Order(
