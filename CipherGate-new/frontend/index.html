@@ -7,8 +7,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
+    <script>
+      // Apply saved theme before paint to prevent flash of wrong theme
+      (function() {
+        var t = localStorage.getItem('cg_theme');
+        if (!t) t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

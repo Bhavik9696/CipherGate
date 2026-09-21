@@ -1,5 +1,6 @@
 import "./Layout.css";
 import AssistantWidget from "./AssistantWidget.jsx";
+import ThemeToggle from "./ThemeToggle.jsx";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard" },
@@ -9,6 +10,7 @@ const NAV = [
   { key: "events", label: "Security Events" },
   { key: "settings", label: "Settings" },
   { key: "_sep", label: "", separator: true },
+  { key: "help", label: "Help & Integration" },
 ];
 
 export default function Layout({ active, onNavigate, children, user, onLogout }) {
@@ -45,6 +47,7 @@ export default function Layout({ active, onNavigate, children, user, onLogout })
           })}
         </nav>
         <div className="shell__sidebar-footer">
+          <ThemeToggle />
           <div className="shell__user-info">
             <div className="shell__user-avatar">
               {displayName.charAt(0).toUpperCase()}
@@ -61,7 +64,7 @@ export default function Layout({ active, onNavigate, children, user, onLogout })
             <span>Gateway online</span>
             {onLogout && (
               <button id="btn-logout" className="shell__logout-btn" onClick={onLogout} title="Sign out">
-                Ã¢ÂÂ
+                ✕
               </button>
             )}
           </div>

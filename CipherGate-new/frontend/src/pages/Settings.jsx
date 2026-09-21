@@ -1,12 +1,19 @@
-import { Page, Panel } from "../components/Primitives.jsx";
+import { Page, Panel, Button } from "../components/Primitives.jsx";
 import { BASE_URL } from "../services/api.js";
 
-export default function Settings() {
+export default function Settings({ onNavigate }) {
   return (
     <Page
       eyebrow="Configuration"
       title="Settings"
       subtitle="CipherGate's security thresholds are set on the backend via environment variables — this page shows what's currently in effect."
+      actions={
+        onNavigate && (
+          <Button variant="secondary" onClick={() => onNavigate("help")}>
+            📖 Help & Integration Guide
+          </Button>
+        )
+      }
     >
       <Panel title="Gateway connection">
         <div className="credential-grid">

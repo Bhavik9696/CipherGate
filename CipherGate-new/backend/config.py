@@ -22,6 +22,8 @@ class Settings:
 
     REPLAY_WINDOW_SECONDS: int = int(os.getenv("REPLAY_WINDOW_SECONDS", "30"))
 
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+
     # How long a used nonce is remembered (must be >= REPLAY_WINDOW_SECONDS,
     # a bit of slack is kept so borderline requests are still caught).
     NONCE_STORE_TTL_SECONDS: int = int(

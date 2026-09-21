@@ -7,8 +7,8 @@
   height: min(570px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
-  background: #101923;
-  border: 1px solid #355260;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
   overflow: hidden;
@@ -33,8 +33,8 @@
 .assistant__typing { color: var(--text-dim); font: 11px var(--font-mono); }
 .assistant__form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
 .assistant__form input { min-width: 0; flex: 1; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); padding: 11px; font: 12px var(--font-sans); }
-.assistant__form button { width: 38px; border: 0; border-radius: 5px; background: var(--accent); color: #07171a; font-size: 18px; cursor: pointer; }
-.assistant__launcher { position: fixed; right: 24px; bottom: 24px; z-index: 19; border: 1px solid var(--accent); border-radius: 20px; padding: 11px 16px; background: #10232a; color: var(--accent); font-weight: 700; cursor: pointer; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
+.assistant__form button { width: 38px; border: 0; border-radius: 5px; background: var(--accent); color: var(--bg); font-size: 18px; cursor: pointer; }
+.assistant__launcher { position: fixed; right: 24px; bottom: 24px; z-index: 19; border: 1px solid var(--accent); border-radius: 20px; padding: 11px 16px; background: var(--bg-raised); color: var(--accent); font-weight: 700; cursor: pointer; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
 .assistant__launcher span { margin-right: 5px; }
 .assistant__launcher--hidden { display: none; }
 @keyframes assistant-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

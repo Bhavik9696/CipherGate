@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Page, Panel, Button, EmptyState } from "../components/Primitives.jsx";
 import { apiGet, apiPostJson } from "../services/api.js";
 
-export default function Applications({ onCredentialsIssued }) {
+export default function Applications({ onCredentialsIssued, onNavigate }) {
   const [apps, setApps] = useState([]);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -45,6 +45,13 @@ export default function Applications({ onCredentialsIssued }) {
       eyebrow="Credential Management"
       title="Applications"
       subtitle="Register a demo client to receive an API key and HMAC secret. The secret is shown once — CipherGate never stores or re-exposes it in plaintext views."
+      actions={
+        onNavigate && (
+          <Button variant="secondary" onClick={() => onNavigate("help")}>
+            🔌 External App Integration Guide
+          </Button>
+        )
+      }
     >
       <Panel title="Register a new application">
         <form onSubmit={register} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -86,9 +93,16 @@ export default function Applications({ onCredentialsIssued }) {
               <code className="credential-value">{issued.hmac_secret}</code>
             </div>
           </div>
-          <p className="credential-note">
-            Paste these into the API Request Editor to sign requests as this application.
-          </p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, flexWrap: "wrap", gap: 8 }}>
+            <p className="credential-note" style={{ margin: 0 }}>
+              Paste these into the API Request Editor or your external app's <code>.env</code> file.
+            </p>
+            {onNavigate && (
+              <Button variant="ghost" style={{ fontSize: 12 }} onClick={() => onNavigate("help")}>
+                How to integrate with external apps →
+              </Button>
+            )}
+          </div>
         </Panel>
       )}
 

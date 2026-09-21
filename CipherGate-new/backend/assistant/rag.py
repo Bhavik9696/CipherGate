@@ -42,6 +42,16 @@ KNOWLEDGE_BASE = (
         "Dashboard counters and Security Events rows come from the security_events table. They show allowed and blocked requests plus HMAC failures, replay attacks, authentication failures, rate-limit violations, and timestamp failures.",
         ("dashboard", "audit", "events", "metrics", "logs"),
     ),
+    KnowledgeChunk(
+        "External app connection",
+        "External applications integrate with CipherGate by registering for an API key and HMAC secret, building a canonical string METHOD\\nPATH\\nTIMESTAMP\\nNONCE\\nBODY, signing with HMAC-SHA256, and sending to /gateway/request with X-API-Key, X-Timestamp, X-Nonce, and X-Signature headers. Keep secrets strictly on your backend server.",
+        ("external", "app", "connection", "integrate", "integration", "connect", "client", "sdk"),
+    ),
+    KnowledgeChunk(
+        "CipherShop integration sample",
+        "CipherShop is a reference e-commerce app demonstrating server-side CipherGate integration. It keeps credentials in Ciphershop/backend/.env, signs orders in services/ciphergate.py, and routes requests through CipherGate port 8000.",
+        ("ciphershop", "sample", "example", "store", "orders", "ecommerce"),
+    ),
 )
 
 

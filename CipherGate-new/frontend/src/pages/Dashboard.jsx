@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
-import { Page, Panel, StatCard, EmptyState } from "../components/Primitives.jsx";
+import { Page, Panel, StatCard, EmptyState, Button } from "../components/Primitives.jsx";
 import { EventTypeTag, StatusBadge } from "../components/Primitives.jsx";
 import { apiGet } from "../services/api.js";
 
-export default function Dashboard() {
+export default function Dashboard({ onNavigate }) {
   const [stats, setStats] = useState(null);
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState(null);
@@ -33,6 +33,13 @@ export default function Dashboard() {
       eyebrow="Security Overview"
       title="Dashboard"
       subtitle="Live counters and recent activity, sourced directly from CipherGate's audit log — nothing here is hardcoded."
+      actions={
+        onNavigate && (
+          <Button variant="secondary" onClick={() => onNavigate("help")}>
+            📖 Help & Integration Guide
+          </Button>
+        )
+      }
     >
       {error && (
         <Panel>

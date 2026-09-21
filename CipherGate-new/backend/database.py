@@ -24,13 +24,13 @@ def gen_id(prefix: str) -> str:
 
 
 class User(Base):
-    """A human dashboard user with email + password credentials."""
+    """A human dashboard user with email + password credentials or Google OAuth."""
 
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=lambda: gen_id("usr"))
     email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)
     full_name = Column(String, nullable=True, default="")
     created_at = Column(DateTime, default=now_utc)
     is_active = Column(Boolean, default=True)

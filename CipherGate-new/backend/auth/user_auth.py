@@ -37,3 +37,27 @@ def get_user_by_email(db: Session, email: str) -> User | None:
 
 def get_user_by_id(db: Session, user_id: str) -> User | None:
     return db.query(User).filter(User.id == user_id).first()
+
+
+def create_or_get_google_user(db: Session, email: str, full_name: str = "") -> User:
+    """Finds an existing user by email or creates a new active user for Google OAuth."""
+    clean_email = email.lower().strip()
+    existing = get_user_by_email(db, clean_email)
+    if existing:
+        if not existing.full_name and full_name:
+            existing.full_name = full_name
+            db.commit()
+            db.refresh(existing)
+        return existing
+
+    # Create new user with a random secure password hash to satisfy schema
+    user = User(
+        email=clean_email,
+        hashed_password=hash_password(secrets.token_urlsafe(32)),
+        full_name=full_name or "",
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user

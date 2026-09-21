@@ -29,7 +29,9 @@ from auth.user_auth import (
     create_user,
     verify_password as verify_user_password,
     get_user_by_email,
+    create_or_get_google_user,
 )
+from auth.google_auth import verify_google_id_token, GoogleAuthError
 from auth.jwt_utils import create_access_token, verify_access_token, JWTError
 from gateway.decision_engine import evaluate_request, DecisionResult
 from audit.logger import log_event
@@ -77,6 +79,10 @@ class UserRegisterRequest(BaseModel):
 class UserLoginRequest(BaseModel):
     email: str
     password: str
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str
 
 
 class GatewayRequest(BaseModel):
@@ -168,6 +174,45 @@ def user_login(payload: UserLoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail={
             "success": False, "error": "AUTHENTICATION_FAILED", "message": "Invalid email or password."
         })
+    token = create_access_token(user.id, user.email)
+    return {
+        "success": True,
+        "user_id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "access_token": token,
+        "token_type": "bearer",
+    }
+
+
+@app.post("/auth/google")
+def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """
+    Authenticate a human user using Google Identity Services (GIS) ID token.
+    Cryptographically verifies signature, expiration, issuer, and client ID audience.
+    Returns standard CipherGate JWT token for dashboard access.
+    """
+    try:
+        id_info = verify_google_id_token(payload.credential)
+    except GoogleAuthError as e:
+        raise HTTPException(status_code=401, detail={
+            "success": False, "error": "GOOGLE_AUTH_FAILED", "message": e.message
+        })
+
+    email = id_info.get("email", "").lower().strip()
+    if not email:
+        raise HTTPException(status_code=400, detail={
+            "success": False, "error": "MISSING_EMAIL", "message": "Google token does not contain a verified email."
+        })
+
+    name = id_info.get("name") or id_info.get("given_name") or ""
+    user = create_or_get_google_user(db, email=email, full_name=name)
+
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail={
+            "success": False, "error": "ACCOUNT_DISABLED", "message": "This account is disabled."
+        })
+
     token = create_access_token(user.id, user.email)
     return {
         "success": True,

@@ -14,7 +14,7 @@ const normalizePath = (value) => {
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 };
 
-export default function RequestEditor({ credentials }) {
+export default function RequestEditor({ credentials, onNavigate }) {
   const [method, setMethod] = useState("POST");
   const [path, setPath] = useState("/api/payment");
   const [apiKey, setApiKey] = useState(credentials?.api_key || "");
@@ -110,6 +110,13 @@ export default function RequestEditor({ credentials }) {
       eyebrow="Live Testing"
       title="API Request Editor"
       subtitle="Build a real signed request, then tamper with it, replay it, or flood it — every check below is computed by the live gateway, not simulated."
+      actions={
+        onNavigate && (
+          <Button variant="secondary" onClick={() => onNavigate("help")}>
+            📖 View Pipeline & Attack Guide
+          </Button>
+        )
+      }
     >
       <Panel title="Client credentials">
         <div className="field-row">

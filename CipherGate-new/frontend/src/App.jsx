@@ -7,6 +7,7 @@ import RequestEditor from "./pages/RequestEditor.jsx";
 import Applications from "./pages/Applications.jsx";
 import SecurityEvents from "./pages/SecurityEvents.jsx";
 import Settings from "./pages/Settings.jsx";
+import HelpGuide from "./pages/HelpGuide.jsx";
 
 export default function App() {
   // Check if we already have a saved session
@@ -43,14 +44,15 @@ export default function App() {
 
   return (
     <Layout active={active} onNavigate={setActive} user={user} onLogout={handleLogout}>
-      {active === "dashboard" && <Dashboard />}
+      {active === "dashboard" && <Dashboard onNavigate={setActive} />}
       {active === "payment" && <PaymentPage credentials={lastCredentials} />}
-      {active === "editor" && <RequestEditor credentials={lastCredentials} />}
+      {active === "editor" && <RequestEditor credentials={lastCredentials} onNavigate={setActive} />}
       {active === "applications" && (
-        <Applications onCredentialsIssued={setLastCredentials} />
+        <Applications onCredentialsIssued={setLastCredentials} onNavigate={setActive} />
       )}
       {active === "events" && <SecurityEvents />}
-      {active === "settings" && <Settings />}
+      {active === "settings" && <Settings onNavigate={setActive} />}
+      {active === "help" && <HelpGuide onNavigate={setActive} />}
     </Layout>
   );
 }

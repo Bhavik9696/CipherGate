@@ -1,0 +1,112 @@
+/* ==========================================================================
+   ThemeToggle — Animated sun / moon toggle
+   ========================================================================== */
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  width: 100%;
+  justify-content: flex-start;
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-toggle:hover {
+  background: var(--panel-alt);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* ── icon container ───────────────────────────────────────────────── */
+.theme-toggle__icon {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+/* ── sun icon ─────────────────────────────────────────────────────── */
+.theme-toggle__sun,
+.theme-toggle__moon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 0.3s ease;
+}
+
+.theme-toggle__sun svg,
+.theme-toggle__moon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── state: dark mode (show moon) ────────────────────────────────── */
+.theme-toggle--dark .theme-toggle__sun {
+  transform: rotate(90deg) scale(0);
+  opacity: 0;
+}
+
+.theme-toggle--dark .theme-toggle__moon {
+  transform: rotate(0deg) scale(1);
+  opacity: 1;
+}
+
+/* ── state: light mode (show sun) ────────────────────────────────── */
+.theme-toggle--light .theme-toggle__sun {
+  transform: rotate(0deg) scale(1);
+  opacity: 1;
+}
+
+.theme-toggle--light .theme-toggle__moon {
+  transform: rotate(-90deg) scale(0);
+  opacity: 0;
+}
+
+/* ── label ────────────────────────────────────────────────────────── */
+.theme-toggle__label {
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+/* ── subtle glow on hover (sun) ──────────────────────────────────── */
+.theme-toggle--light:hover .theme-toggle__sun svg {
+  filter: drop-shadow(0 0 4px rgba(245, 185, 66, 0.6));
+}
+
+/* ── subtle glow on hover (moon) ─────────────────────────────────── */
+.theme-toggle--dark:hover .theme-toggle__moon svg {
+  filter: drop-shadow(0 0 4px rgba(47, 212, 224, 0.6));
+}
+
+/* ── floating theme toggle (for AuthPage) ────────────────────────── */
+.theme-toggle--floating {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 50;
+  width: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+  padding: 8px 14px;
+}
+
+[data-theme="light"] .theme-toggle--floating {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
