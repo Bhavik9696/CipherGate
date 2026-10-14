@@ -35,6 +35,17 @@ export async function askAssistant(question) {
   return apiPostJson("/assistant/chat", { question });
 }
 
+export async function apiDelete(path) {
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "DELETE",
+    });
+    return { status: res.status, data: await parseJsonSafe(res) };
+  } catch (err) {
+    return { status: 0, data: { message: "Network error: Unable to connect to backend server (is port 8000 running?)" } };
+  }
+}
+
 /**
  * Sends a raw, already-serialized body with custom security headers -
  * used by the Request Editor so the bytes signed are exactly the bytes

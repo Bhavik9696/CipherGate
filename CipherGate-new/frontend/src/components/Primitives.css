@@ -163,6 +163,32 @@
 }
 .btn--ghost:hover:not(:disabled) { color: var(--text); border-color: var(--text-dim); }
 
+.btn-icon {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+.btn-icon:hover:not(:disabled) {
+  background: var(--danger-dim);
+  color: var(--danger);
+  border-color: rgba(255, 93, 115, 0.3);
+}
+.btn-icon:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.btn-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .empty {
   text-align: center;
   padding: 34px 10px;

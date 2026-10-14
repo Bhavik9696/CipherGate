@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
-import { Page, Panel, StatCard, EmptyState, Button } from "../components/Primitives.jsx";
+import { Page, Panel, StatCard, EmptyState, Button, TrashIcon } from "../components/Primitives.jsx";
 import { EventTypeTag, StatusBadge } from "../components/Primitives.jsx";
-import { apiGet } from "../services/api.js";
+import { apiGet, apiDelete } from "../services/api.js";
 
 export default function Dashboard({ onNavigate }) {
   const [stats, setStats] = useState(null);
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -21,6 +22,23 @@ export default function Dashboard({ onNavigate }) {
       setError("Could not reach CipherGate. Is the backend running on the configured URL?");
     }
   }, []);
+
+  const handleDelete = async (id, e) => {
+    e?.stopPropagation?.();
+    setDeletingId(id);
+    try {
+      const res = await apiDelete(`/audit/logs/${id}`);
+      if (res.status === 200) {
+        setLogs((prev) => prev.filter((item) => item.id !== id));
+        const statsRes = await apiGet("/dashboard/stats");
+        if (statsRes.status === 200) {
+          setStats(statsRes.data);
+        }
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -74,6 +92,7 @@ export default function Dashboard({ onNavigate }) {
                 <th>Event</th>
                 <th>Check</th>
                 <th>Status</th>
+                <th style={{ width: 44, textAlign: "center" }}></th>
               </tr>
             </thead>
             <tbody>
@@ -84,6 +103,17 @@ export default function Dashboard({ onNavigate }) {
                   <td><EventTypeTag type={e.event_type} /></td>
                   <td className="mono">{e.security_check}</td>
                   <td><StatusBadge status={e.status} /></td>
+                  <td style={{ textAlign: "center" }}>
+                    <button
+                      className="btn-icon"
+                      title="Delete analysis"
+                      aria-label="Delete analysis"
+                      disabled={deletingId === e.id}
+                      onClick={(evt) => handleDelete(e.id, evt)}
+                    >
+                      <TrashIcon />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

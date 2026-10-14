@@ -420,6 +420,19 @@ def audit_logs(limit: int = 50, db: Session = Depends(get_db)):
     ]
 
 
+@app.delete("/audit/logs/{event_id}")
+def delete_audit_log(event_id: str, db: Session = Depends(get_db)):
+    event = db.query(SecurityEvent).filter(SecurityEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(
+            status_code=404,
+            detail={"success": False, "error": "NOT_FOUND", "message": "Security event not found."},
+        )
+    db.delete(event)
+    db.commit()
+    return {"success": True, "message": f"Event {event_id} deleted successfully."}
+
+
 @app.get("/dashboard/stats")
 def dashboard_stats(db: Session = Depends(get_db)):
     total = db.query(func.count(SecurityEvent.id)).scalar() or 0
