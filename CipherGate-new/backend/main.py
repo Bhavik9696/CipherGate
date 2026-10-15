@@ -37,10 +37,12 @@ from gateway.decision_engine import evaluate_request, DecisionResult
 from audit.logger import log_event
 from api.demo_backend import process_payment
 from api.razorpay_routes import router as razorpay_router
+from api.analytics_routes import router as analytics_router
 from assistant.rag import answer as answer_assistant
 
 app = FastAPI(title="CipherGate", version="1.0.0")
 app.include_router(razorpay_router)
+app.include_router(analytics_router)
 
 app.add_middleware(
     CORSMiddleware,

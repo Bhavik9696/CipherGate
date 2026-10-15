@@ -1,0 +1,129 @@
+[1mdiff --git a/CipherGate-new/tests/test_gateway.py b/CipherGate-new/tests/test_gateway.py[m
+[1mindex 9de329b..c466c19 100644[m
+[1m--- a/CipherGate-new/tests/test_gateway.py[m
+[1m+++ b/CipherGate-new/tests/test_gateway.py[m
+[36m@@ -162,3 +162,154 @@[m [mdef test_dashboard_stats_reflect_real_events(client, registered_app):[m
+     assert stats["total_requests"] >= 2[m
+     assert stats["allowed"] >= 1[m
+     assert stats["replay_attacks"] >= 1[m
+[32m+[m
+[32m+[m
+[32m+[m[32m# ---------------------------------------------------------------------------[m
+[32m+[m[32m# Essential Security Coverage: Edge Cases, Audit Types & Business Isolation[m
+[32m+[m[32m# ---------------------------------------------------------------------------[m
+[32m+[m
+[32m+[m[32mdef test_missing_api_key_is_rejected(client, registered_app):[m
+[32m+[m[32m    """Missing X-API-Key header is rejected with 401 AUTHENTICATION_FAILED."""[m
+[32m+[m[32m    headers, body_raw = sign_payment_request(registered_app, {"amount": 500, "receiver": "ABC Store"})[m
+[32m+[m[32m    del headers["X-API-Key"][m
+[32m+[m[32m    resp = client.post("/api/payment", headers=headers, content=body_raw)[m
+[32m+[m[32m    assert resp.status_code == 401[m
+[32m+[m[32m    data = resp.json()[m
+[32m+[m[32m    assert data["error"] == "AUTHENTICATION_FAILED"[m
+[32m+[m[32m    assert data["security_check"] == "authentication"[m
+[32m+[m[32m    assert data["decision"]["allowed"] is False[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef test_missing_jwt_is_rejected(client):[m
+[32m+[m[32m    """Protected /auth/verify endpoint rejects requests missing Authorization header."""[m
+[32m+[m[32m    resp = client.get("/auth/verify")[m
+[32m+[m[32m    assert resp.status_code == 401[m
+[32m+[m[32m    assert resp.json()["detail"]["error"] == "MISSING_TOKEN"[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef test_missing_hmac_signature_rejected(client, registered_app):[m
+[32m+[m[32m    """Missing X-Signature header is rejected with 403 HMAC_VERIFICATION_FAILED."""[m
+[32m+[m[32m    headers, body_raw = sign_payment_request(registered_app, {"amount": 500, "receiver": "ABC Store"})[m
+[32m+[m[32m    del headers["X-Signature"][m
+[32m+[m[32m    resp = client.post("/api/payment", headers=headers, content=body_raw)[m
+[32m+[m[32m    assert resp.status_code == 403[m
+[32m+[m[32m    data = resp.json()[m
+[32m+[m[32m    assert data["error"] == "HMAC_VERIFICATION_FAILED"[m
+[32m+[m[32m    assert data["message"] == "Missing signature"[m
+[32m+[m[32m    assert data["security_check"] == "hmac"[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef test_missing_nonce_rejected(client, registered_app):[m
+[32m+[m[32m    """Request signed with empty nonce is rejected by the nonce check with 401 NONCE_MISSING."""[m
+[32m+[m[32m    headers, body_raw = sign_request(registered_app, {"amount": 500, "receiver": "Shop"}, nonce="")[m
+[32m+[m[32m    del headers["X-Nonce"][m
+[32m+[m[32m    resp = client.post("/api/payment", headers=headers, content=body_raw)[m
+[32m+[m[32m    assert resp.status_code == 401[m
+[32m+[m[32m    data = resp.json()[m
+[32m+[m[32m    assert data["error"] == "NONCE_MISSING"[m
+[32m+[m[32m    assert data["security_check"] == "nonce"[m
+[32m+[m[32m    assert data["decision"]["allowed"] is False[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef test_future_timestamp_rejected(client, registered_app):[m
+[32m+[m[32m    """Timestamp far in the future (clock-skew attack) is rejected with 408 TIMESTAMP_EXPIRED."""[m
+[32m+[m[32m    future_ts = time.time() + 300  # 5 minutes in future (window is 30s)[m
+[32m+[m[32m    headers, body_raw = sign_payment_request(registered_app, {"amount": 500, "receiver": "ABC Store"}, timestamp=future_ts)[m
+[32m+[m[32m    resp = client.post("/api/payment", headers=headers, content=body_raw)[m
+[32m+[m[32m    assert resp.status_code == 408[m
+[32m+[m[32m    data = resp.json()[m
+[32m+[m[32m    assert data["error"] == "TIMESTAMP_EXPIRED"[m
+[32m+[m[32m    assert data["security_check"] == "timestamp"[m
+[32m+[m[32m    assert data["decision"]["allowed"] is False[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef test_malformed_timestamp_rejected(client, registered_app):[m
+[32m+[m[32m    """A non-numeric timestamp string is rejected with 401 TIMESTAMP_INVALID."""[m
+[32m+[m[32m    import json[m
+[32m+[m[32m    from crypto.hmac_utils import build_canonical_request, sign[m
+[32m+[m
+[32m+[m[32m    body = {"amount": 500, "receiver": "Shop"}[m
+[32m+[m[32m    body_raw = json.dumps(body, separators=(",", ":"))[m
+[32m+[m[32m    canonical = build_canonical_request("POST", "/api/payment", "invalid-timestamp", "test_nonce_123", body_raw)[m
+[32m+[m[32m    signature = sign(registered_app["hmac_secret"], canonical)[m
+[32m+[m[32m    headers = {[m
+[32m+[m[32m        "X-API-Key": registered_app["api_key"],[m
+[32m+[m[32m        "X-Timestamp": "invalid-timestamp",[m
+[32m+[m[32m        "X-Nonce": "test_nonce_123",[m
+[32m+[m[32m        "X-Signature": signature,[m
+[32m+[m[32m        "Content-Type": "application/json",[m
+[32m+[m[32m    }[m
+[32m+[m[32m    resp = client.post("/api/payment", headers=headers, content=body_raw)[m
+[32m+[m[32m    assert resp.status_code == 401[m
+[32m+[m[32m    data = resp.json()[m
+[32m+[m[32m    assert data["error"] == "TIMESTAMP_INVALID"[m
+[32m+[m[32m    assert data["security_check"] == "timestamp"[m
+[32m+[m[32m    assert data["decision"]["allowed"] is False[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef test_audit_log_records_specific_security_event_types(client, registered_app):[m
+[32m+[m[32m    """Verifies that each security failure mode records its specific event_type and status."""[m
+[32m+[m[32m    # 1. Tampering -> event_type == "TAMPERING", status == "BLOCKED"[m
+[32m+[m[32m    headers, _ = sign_payment_request(registered_app, {"amount": 500, "receiver": "Shop"})[m
+[32m+[m[32m    client.post("/api/payment", headers=headers, content='{"amount": 5000, "receiver": "Shop"}')[m
+[32m+[m
+[32m+[m[32m    # 2. Replay attack -> event_type == "REPLAY", status == "BLOCKED"[m
+[32m+[m[32m    headers_valid, body_valid = sign_payment_request(registered_app, {"amount": 250, "receiver": "Shop"})[m
+[32m+[m[32m    client.post("/api/payment", headers=headers_valid, content=body_valid)  # allowed (VALID)[m
+[32m+[m[32m    client.post("/api/payment", headers=headers_valid, content=body_valid)  # replay (REPLAY)[m
+[32m+[m
+[32m+[m[32m    # 3. Expired timestamp -> event_type == "TIMESTAMP_EXPIRED", status == "BLOCKED"[m
+[32m+[m[32m    old_headers, old_body = sign_payment_request(registered_app, {"amount": 100, "receiver": "Shop"}, timestamp=time.time() - 300)[m
+[32m+[m[32m    client.post("/api/payment", headers=old_headers, content=old_body)[m
+[32m+[m
+[32m+[m[32m    # 4. Auth failure -> event_type == "AUTH_FAILURE", status == "BLOCKED"[m
+[32m+[m[32m    headers_bad_key, body_bad_key = sign_payment_request(registered_app, {"amount": 100, "receiver": "Shop"})[m
+[32m+[m[32m    headers_bad_key["X-API-Key"] = "cg_live_invalid_key"[m
+[32m+[m[32m    client.post("/api/payment", headers=headers_bad_key, content=body_bad_key)[m
+[32m+[m
+[32m+[m[32m    logs = client.get("/audit/logs?limit=20").json()[m
+[32m+[m[32m    event_types = {e["event_type"] for e in logs}[m
+[32m+[m[32m    assert "VALID" in event_types[m
+[32m+[m[32m    assert "TAMPERING" in event_types[m
+[32m+[m[32m    assert "REPLAY" in event_types[m
+[32m+[m[32m    assert "TIMESTAMP_EXPIRED" in event_types[m
+[32m+[m[32m    assert "AUTH_FAILURE" in event_types[m
+[32m+[m
+[32m+[m[32m    for event in logs:[m
+[32m+[m[32m        if event["event_type"] in ["TAMPERING", "REPLAY", "TIMESTAMP_EXPIRED", "AUTH_FAILURE"]:[m
+[32m+[m[32m            assert event["status"] == "BLOCKED"[m
+[32m+[m[32m        elif event["event_type"] == "VALID":[m
+[32m+[m[32m            assert event["status"] == "ALLOWED"[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef test_protected_business_operation_never_executes_on_rejec

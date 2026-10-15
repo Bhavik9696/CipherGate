@@ -65,5 +65,17 @@ export async function apiPostRaw(path, bodyRaw, headers) {
   }
 }
 
+export async function getRequestDecisions(range = "all") {
+  return apiGet(`/analytics/request-decisions?range=${range}`);
+}
+
+export async function getApplicationRequests(range = "all") {
+  return apiGet(`/analytics/application-requests?range=${range}`);
+}
+
+export async function getSecurityThreats(range = "all") {
+  return apiGet(`/analytics/security-threats?range=${range}`);
+}
+
 export { BASE_URL };
 

@@ -6,6 +6,8 @@ import PaymentPage from "./pages/PaymentPage.jsx";
 import RequestEditor from "./pages/RequestEditor.jsx";
 import Applications from "./pages/Applications.jsx";
 import SecurityEvents from "./pages/SecurityEvents.jsx";
+import RequestAnalytics from "./pages/RequestAnalytics.jsx";
+import ApplicationAnalytics from "./pages/ApplicationAnalytics.jsx";
 import Settings from "./pages/Settings.jsx";
 import HelpGuide from "./pages/HelpGuide.jsx";
 
@@ -45,6 +47,8 @@ export default function App() {
   return (
     <Layout active={active} onNavigate={setActive} user={user} onLogout={handleLogout}>
       {active === "dashboard" && <Dashboard onNavigate={setActive} />}
+      {active === "request-analytics" && <RequestAnalytics onNavigate={setActive} />}
+      {active === "app-analytics" && <ApplicationAnalytics onNavigate={setActive} />}
       {active === "payment" && <PaymentPage credentials={lastCredentials} />}
       {active === "editor" && <RequestEditor credentials={lastCredentials} onNavigate={setActive} />}
       {active === "applications" && (

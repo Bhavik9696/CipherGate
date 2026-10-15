@@ -162,3 +162,154 @@ def test_dashboard_stats_reflect_real_events(client, registered_app):
     assert stats["total_requests"] >= 2
     assert stats["allowed"] >= 1
     assert stats["replay_attacks"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Essential Security Coverage: Edge Cases, Audit Types & Business Isolation
+# ---------------------------------------------------------------------------
+
+def test_missing_api_key_is_rejected(client, registered_app):
+    """Missing X-API-Key header is rejected with 401 AUTHENTICATION_FAILED."""
+    headers, body_raw = sign_payment_request(registered_app, {"amount": 500, "receiver": "ABC Store"})
+    del headers["X-API-Key"]
+    resp = client.post("/api/payment", headers=headers, content=body_raw)
+    assert resp.status_code == 401
+    data = resp.json()
+    assert data["error"] == "AUTHENTICATION_FAILED"
+    assert data["security_check"] == "authentication"
+    assert data["decision"]["allowed"] is False
+
+
+def test_missing_jwt_is_rejected(client):
+    """Protected /auth/verify endpoint rejects requests missing Authorization header."""
+    resp = client.get("/auth/verify")
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["error"] == "MISSING_TOKEN"
+
+
+def test_missing_hmac_signature_rejected(client, registered_app):
+    """Missing X-Signature header is rejected with 403 HMAC_VERIFICATION_FAILED."""
+    headers, body_raw = sign_payment_request(registered_app, {"amount": 500, "receiver": "ABC Store"})
+    del headers["X-Signature"]
+    resp = client.post("/api/payment", headers=headers, content=body_raw)
+    assert resp.status_code == 403
+    data = resp.json()
+    assert data["error"] == "HMAC_VERIFICATION_FAILED"
+    assert data["message"] == "Missing signature"
+    assert data["security_check"] == "hmac"
+
+
+def test_missing_nonce_rejected(client, registered_app):
+    """Request signed with empty nonce is rejected by the nonce check with 401 NONCE_MISSING."""
+    headers, body_raw = sign_request(registered_app, {"amount": 500, "receiver": "Shop"}, nonce="")
+    del headers["X-Nonce"]
+    resp = client.post("/api/payment", headers=headers, content=body_raw)
+    assert resp.status_code == 401
+    data = resp.json()
+    assert data["error"] == "NONCE_MISSING"
+    assert data["security_check"] == "nonce"
+    assert data["decision"]["allowed"] is False
+
+
+def test_future_timestamp_rejected(client, registered_app):
+    """Timestamp far in the future (clock-skew attack) is rejected with 408 TIMESTAMP_EXPIRED."""
+    future_ts = time.time() + 300  # 5 minutes in future (window is 30s)
+    headers, body_raw = sign_payment_request(registered_app, {"amount": 500, "receiver": "ABC Store"}, timestamp=future_ts)
+    resp = client.post("/api/payment", headers=headers, content=body_raw)
+    assert resp.status_code == 408
+    data = resp.json()
+    assert data["error"] == "TIMESTAMP_EXPIRED"
+    assert data["security_check"] == "timestamp"
+    assert data["decision"]["allowed"] is False
+
+
+def test_malformed_timestamp_rejected(client, registered_app):
+    """A non-numeric timestamp string is rejected with 401 TIMESTAMP_INVALID."""
+    import json
+    from crypto.hmac_utils import build_canonical_request, sign
+
+    body = {"amount": 500, "receiver": "Shop"}
+    body_raw = json.dumps(body, separators=(",", ":"))
+    canonical = build_canonical_request("POST", "/api/payment", "invalid-timestamp", "test_nonce_123", body_raw)
+    signature = sign(registered_app["hmac_secret"], canonical)
+    headers = {
+        "X-API-Key": registered_app["api_key"],
+        "X-Timestamp": "invalid-timestamp",
+        "X-Nonce": "test_nonce_123",
+        "X-Signature": signature,
+        "Content-Type": "application/json",
+    }
+    resp = client.post("/api/payment", headers=headers, content=body_raw)
+    assert resp.status_code == 401
+    data = resp.json()
+    assert data["error"] == "TIMESTAMP_INVALID"
+    assert data["security_check"] == "timestamp"
+    assert data["decision"]["allowed"] is False
+
+
+def test_audit_log_records_specific_security_event_types(client, registered_app):
+    """Verifies that each security failure mode records its specific event_type and status."""
+    # 1. Tampering -> event_type == "TAMPERING", status == "BLOCKED"
+    headers, _ = sign_payment_request(registered_app, {"amount": 500, "receiver": "Shop"})
+    client.post("/api/payment", headers=headers, content='{"amount": 5000, "receiver": "Shop"}')
+
+    # 2. Replay attack -> event_type == "REPLAY", status == "BLOCKED"
+    headers_valid, body_valid = sign_payment_request(registered_app, {"amount": 250, "receiver": "Shop"})
+    client.post("/api/payment", headers=headers_valid, content=body_valid)  # allowed (VALID)
+    client.post("/api/payment", headers=headers_valid, content=body_valid)  # replay (REPLAY)
+
+    # 3. Expired timestamp -> event_type == "TIMESTAMP_EXPIRED", status == "BLOCKED"
+    old_headers, old_body = sign_payment_request(registered_app, {"amount": 100, "receiver": "Shop"}, timestamp=time.time() - 300)
+    client.post("/api/payment", headers=old_headers, content=old_body)
+
+    # 4. Auth failure -> event_type == "AUTH_FAILURE", status == "BLOCKED"
+    headers_bad_key, body_bad_key = sign_payment_request(registered_app, {"amount": 100, "receiver": "Shop"})
+    headers_bad_key["X-API-Key"] = "cg_live_invalid_key"
+    client.post("/api/payment", headers=headers_bad_key, content=body_bad_key)
+
+    logs = client.get("/audit/logs?limit=20").json()
+    event_types = {e["event_type"] for e in logs}
+    assert "VALID" in event_types
+    assert "TAMPERING" in event_types
+    assert "REPLAY" in event_types
+    assert "TIMESTAMP_EXPIRED" in event_types
+    assert "AUTH_FAILURE" in event_types
+
+    for event in logs:
+        if event["event_type"] in ["TAMPERING", "REPLAY", "TIMESTAMP_EXPIRED", "AUTH_FAILURE"]:
+            assert event["status"] == "BLOCKED"
+        elif event["event_type"] == "VALID":
+            assert event["status"] == "ALLOWED"
+
+
+def test_protected_business_operation_never_executes_on_rejected_requests(client, registered_app):
+    """Verifies process_payment is never invoked when requests fail security verification."""
+    from unittest.mock import patch
+
+    with patch("main.process_payment") as mock_process:
+        # 1. Missing API Key
+        client.post("/api/payment", headers={}, content='{"amount": 500}')
+        mock_process.assert_not_called()
+
+        # 2. Tampered body
+        headers, _ = sign_payment_request(registered_app, {"amount": 500, "receiver": "Shop"})
+        client.post("/api/payment", headers=headers, content='{"amount": 9999, "receiver": "Shop"}')
+        mock_process.assert_not_called()
+
+        # 3. Expired timestamp
+        old_headers, old_body = sign_payment_request(registered_app, {"amount": 500, "receiver": "Shop"}, timestamp=time.time() - 300)
+        client.post("/api/payment", headers=old_headers, content=old_body)
+        mock_process.assert_not_called()
+
+        # 4. Replay attack
+        valid_headers, valid_body = sign_payment_request(registered_app, {"amount": 500, "receiver": "Shop"})
+        mock_process.return_value = {"success": True, "message": "Payment request processed", "amount": 500}
+        resp1 = client.post("/api/payment", headers=valid_headers, content=valid_body)
+        assert resp1.status_code == 200
+        mock_process.assert_called_once()
+
+        # Resend exact same request (replay)
+        resp2 = client.post("/api/payment", headers=valid_headers, content=valid_body)
+        assert resp2.status_code == 409
+        # Call count must still be 1 - process_payment was NOT called on replay
+        mock_process.assert_called_once()

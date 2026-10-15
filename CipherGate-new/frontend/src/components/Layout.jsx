@@ -4,6 +4,8 @@ import ThemeToggle from "./ThemeToggle.jsx";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard" },
+  { key: "request-analytics", label: "Request Analytics" },
+  { key: "app-analytics", label: "Application Analytics" },
   { key: "payment", label: "Payment Checkout" },
   { key: "editor", label: "Request Editor" },
   { key: "applications", label: "Applications" },
