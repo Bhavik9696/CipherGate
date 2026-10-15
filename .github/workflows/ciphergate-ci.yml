@@ -1,0 +1,93 @@
+name: CipherGate CI & Security Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Enforce least-privilege security permissions
+permissions:
+  contents: read
+
+# Cancel redundant in-progress runs for the same pull request
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend-security-tests:
+    name: Backend Security Tests (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      DATABASE_URL: sqlite:///./ci_test_ciphergate.db
+      JWT_SECRET: ci-testing-secret-key-32-characters-minimum
+      JWT_EXPIRE_MINUTES: "30"
+      DEFAULT_RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_DEFAULT: "20"
+      REPLAY_WINDOW_SECONDS: "30"
+      RAZORPAY_KEY_ID: rzp_test_ci_mock_key_id
+      RAZORPAY_KEY_SECRET: ci_mock_secret_key_12345
+      GOOGLE_CLIENT_ID: ci-mock-client-id.apps.googleusercontent.com
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: "CipherGate-new/requirements.txt"
+
+      - name: Install backend dependencies
+        working-directory: CipherGate-new
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Prepare test environment
+        working-directory: CipherGate-new/backend
+        run: |
+          # Ensure backend/.env exists with safe test values so dotenv loader has fallback keys
+          cp .env.example .env || true
+          echo "RAZORPAY_KEY_ID=rzp_test_ci_mock_key_id" >> .env
+          echo "RAZORPAY_KEY_SECRET=ci_mock_secret_key_12345" >> .env
+
+      - name: Run backend security tests
+        working-directory: CipherGate-new
+        run: |
+          python -m pytest tests/ -v
+
+  frontend-build:
+    name: Frontend Build Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: "CipherGate-new/frontend/package-lock.json"
+
+      - name: Install frontend dependencies
+        working-directory: CipherGate-new/frontend
+        run: npm ci
+
+      - name: Verify frontend production build
+        working-directory: CipherGate-new/frontend
+        env:
+          VITE_API_BASE_URL: "http://localhost:8000"
+          VITE_GOOGLE_CLIENT_ID: "ci-mock-google-client-id"
+        run: npm run build
